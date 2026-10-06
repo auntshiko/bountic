@@ -55,7 +55,7 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
         }
 
         const response = await approveBounty({ owner, repo, issueNumber, splitPayouts });
-        const { payoutType, recipientEmail, recipientWallet, recipients } = response.payout;
+        const { payoutType, recipientEmail, recipientWallet, recipients, warnings } = response.payout;
 
         let message = "";
         if (recipients?.length) {
@@ -68,6 +68,10 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
           message = `Payout sent to ${recipientEmail}`;
         } else if (payoutType === "unclaimed") {
           message = "Winner not connected. Notified via issue comment to claim.";
+        }
+
+        if (warnings?.length) {
+          message += ` Warning: ${warnings.join("; ")}`;
         }
 
         setSuccessMessage(message);
