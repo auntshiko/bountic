@@ -5,7 +5,15 @@ import { getViewerRepoPermission } from "@/lib/auth/github-permissions";
 import { approveBountyPayout } from "@/lib/bounty/services/approve-payout";
 
 const approvalBodySchema = z.object({
-  splitPayouts: z.array(z.object({ githubUsername: z.string().min(1), amount: z.number().positive() })).min(2).optional(),
+  splitPayouts: z.array(
+    z.object({
+      githubUsername: z.string().regex(/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i, "Invalid GitHub username"),
+      amount: z.number().positive().refine(
+        (amount) => Number.isSafeInteger(Math.round(amount * 100)) && Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-8,
+        "Payout amount must use whole cents",
+      ),
+    }).strict(),
+  ).min(2).max(50).optional(),
 });
 
 const routeParamsSchema = z.object({
