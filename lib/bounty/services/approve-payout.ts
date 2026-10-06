@@ -145,7 +145,7 @@ export async function approveBountyPayout(params: {
           memo: "Bountic split payout for " + issueId,
         });
       } catch (error) {
-        await supabase
+        const { data: failedReservation, error: failureUpdateError } = await supabase
           .from("payout_events")
           .update({
             status: "FAILED",
@@ -159,7 +159,18 @@ export async function approveBountyPayout(params: {
           .eq("issue_id", issueId)
           .ilike("recipient_username", recipient.githubUsername)
           .eq("status", "PENDING")
-          .contains("metadata", { split_payout: true });
+          .contains("metadata", { split_payout: true })
+          .select("id")
+          .maybeSingle();
+
+        if (failureUpdateError || !failedReservation) {
+          console.error("Split payout failed and its reservation could not be marked FAILED:", {
+            issueId,
+            githubUsername: recipient.githubUsername,
+            payoutError: error,
+            failureUpdateError: failureUpdateError ?? "reserved payout row was not found",
+          });
+        }
         throw error;
       }
 
