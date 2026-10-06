@@ -118,7 +118,7 @@ create index if not exists payout_events_issue_id_idx on public.payout_events(is
 create index if not exists payout_events_recipient_username_idx
   on public.payout_events(recipient_username);
 create unique index if not exists payout_events_split_reservation_unique_idx
-  on public.payout_events(issue_id, recipient_username)
+  on public.payout_events(issue_id, lower(recipient_username))
   where (metadata ->> 'split_payout') = 'true';
 
 create table if not exists public.webhook_deliveries (
