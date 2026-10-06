@@ -154,6 +154,7 @@ export async function approveBounty(params: {
   owner: string;
   repo: string;
   issueNumber: number;
+  splitPayouts?: Array<{ githubUsername: string; amount: number }>;
 }): Promise<{
   success: boolean;
   payout: {
@@ -172,6 +173,8 @@ export async function approveBounty(params: {
     `${API_BASE}/api/bounty/${params.owner}/${params.repo}/issues/${params.issueNumber}/approve`,
     {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params.splitPayouts ? { splitPayouts: params.splitPayouts } : {}),
     },
   );
 
