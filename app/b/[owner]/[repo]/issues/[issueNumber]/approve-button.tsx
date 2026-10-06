@@ -49,6 +49,27 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
     (entry): entry is { githubUsername: string; amount: number } => entry !== null,
   );
   const previewTotal = validPreviewSplits?.reduce((sum, entry) => sum + entry.amount, 0) ?? 0;
+  const hasSplitInput = splitText.trim().length > 0;
+  const hasInvalidSplitRow = previewSplits?.some((entry) => entry === null) ?? false;
+  const hasInvalidSplitCount = hasSplitInput && (validPreviewSplits?.length ?? 0) < 2;
+  const hasTooManySplits = (validPreviewSplits?.length ?? 0) > 50;
+  const hasDuplicateRecipients =
+    validPreviewSplits !== undefined &&
+    new Set(validPreviewSplits.map((entry) => entry.githubUsername.toLowerCase())).size !== validPreviewSplits.length;
+  const hasIncorrectTotal =
+    hasSplitInput &&
+    Math.round(previewTotal * 100) !== Math.round(totalAmount * 100);
+  const splitValidationError = hasInvalidSplitRow
+    ? "Use a valid GitHub username and whole-cent USDC amount on every line."
+    : hasInvalidSplitCount
+      ? "A split payout requires at least two contributors."
+      : hasTooManySplits
+        ? "A split payout supports at most 50 contributors."
+        : hasDuplicateRecipients
+          ? "Split payout recipients must be unique."
+          : hasIncorrectTotal
+            ? `Split total must equal ${totalAmount.toFixed(2)} USDC.`
+            : null;
 
   const onApprove = () => {
     setError(null);
@@ -64,8 +85,8 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
           (entry): entry is { githubUsername: string; amount: number } => entry !== null,
         );
 
-        if (splitPayouts && splitPayouts.length < 2) {
-          throw new Error("A split payout requires at least two contributors");
+        if (splitPayouts && (splitPayouts.length < 2 || splitPayouts.length > 50)) {
+          throw new Error("A split payout requires between 2 and 50 contributors");
         }
 
         if (splitPayouts && new Set(splitPayouts.map((entry) => entry.githubUsername.toLowerCase())).size !== splitPayouts.length) {
@@ -144,7 +165,7 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
       ) : null}
       <Button
         onClick={onApprove}
-        disabled={isPending}
+        disabled={isPending || Boolean(splitValidationError)}
         className="mt-4 h-10 w-full bg-emerald-400 text-black hover:bg-emerald-300"
       >
         {isPending ? (
