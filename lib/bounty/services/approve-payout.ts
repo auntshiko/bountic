@@ -89,15 +89,68 @@ export async function approveBountyPayout(params: {
       throw new Error("@" + unresolved.githubUsername + " must connect a payout destination before approval");
     }
 
+    // Reserve every recipient before any external transfer. The unique
+    // (issue_id, recipient_username) index makes concurrent approvals fail
+    // before money moves and leaves a durable checkpoint for ambiguous retries.
+    const reservationRows = destinations.map((recipient) => ({
+      issue_id: issueId,
+      recipient_username: recipient.githubUsername,
+      amount: recipient.cents / 100,
+      status: "PENDING" as const,
+      metadata: {
+        approved_by: params.approvedBy,
+        payout_source: "web",
+        split_payout: true,
+      },
+    }));
+    const { error: reservationError } = await supabase.from("payout_events").insert(reservationRows);
+    if (reservationError) {
+      throw new Error("Split payout is already reserved or completed; refusing a duplicate transfer");
+    }
+
     const results = [];
     for (const recipient of destinations) {
       const amount = recipient.cents / 100;
-      const result = await callLocusPayoutByEmail({
-        toEmail: recipient.email!,
-        amount,
-        memo: "Bountic split payout for " + issueId,
-      });
-      results.push({ ...recipient, amount, result });
+      try {
+        const result = await callLocusPayoutByEmail({
+          toEmail: recipient.email!,
+          amount,
+          memo: "Bountic split payout for " + issueId,
+        });
+        const { error: receiptError } = await supabase
+          .from("payout_events")
+          .update({
+            locus_transaction_id: result.transactionId,
+            transaction_hash: result.txHash,
+            status: "SUCCESS",
+            metadata: {
+              approved_by: params.approvedBy,
+              payout_source: "web",
+              payout_type: result.payoutType,
+              recipient_email: result.recipientEmail,
+              split_payout: true,
+            },
+          })
+          .eq("issue_id", issueId)
+          .eq("recipient_username", recipient.githubUsername);
+        if (receiptError) throw new Error("Failed to persist payout receipt: " + receiptError.message);
+        results.push({ ...recipient, amount, result });
+      } catch (error) {
+        await supabase
+          .from("payout_events")
+          .update({
+            status: "FAILED",
+            metadata: {
+              approved_by: params.approvedBy,
+              payout_source: "web",
+              split_payout: true,
+              error: error instanceof Error ? error.message : "Unknown payout failure",
+            },
+          })
+          .eq("issue_id", issueId)
+          .eq("recipient_username", recipient.githubUsername);
+        throw error;
+      }
     }
 
     const now = new Date().toISOString();
@@ -113,32 +166,17 @@ export async function approveBountyPayout(params: {
     if (updateError) throw new Error("Failed to update bounty status to PAID: " + updateError.message);
 
     for (const recipient of results) {
-      const { error: payoutEventError } = await supabase.from("payout_events").insert({
-        issue_id: issueId,
-        recipient_username: recipient.githubUsername,
-        amount: recipient.amount,
-        locus_transaction_id: recipient.result.transactionId,
-        transaction_hash: recipient.result.txHash,
-        status: "SUCCESS",
-        metadata: {
-          approved_by: params.approvedBy,
-          payout_source: "web",
-          payout_type: recipient.result.payoutType,
-          recipient_email: recipient.result.recipientEmail,
-          split_payout: true,
-        },
-      });
-      if (payoutEventError) throw new Error("Failed to persist payout event: " + payoutEventError.message);
+    const { error: activityError } = await supabase.from("activity_events").insert({
+      issue_id: issueId,
+      event_type: "PAYOUT_SENT",
+      actor_username: recipient.githubUsername,
+      amount: recipient.amount,
+      tx_hash: recipient.result.txHash,
+      metadata: { approved_by: params.approvedBy, payout_source: "web", split_payout: true },
+    });
+    if (activityError) throw new Error("Failed to persist payout activity: " + activityError.message);
+    }
 
-      const { error: activityError } = await supabase.from("activity_events").insert({
-        issue_id: issueId,
-        event_type: "PAYOUT_SENT",
-        actor_username: recipient.githubUsername,
-        amount: recipient.amount,
-        tx_hash: recipient.result.txHash,
-        metadata: { approved_by: params.approvedBy, payout_source: "web", split_payout: true },
-      });
-      if (activityError) throw new Error("Failed to persist payout activity: " + activityError.message);
     }
 
     await syncGithubBountyArtifacts(issueId);
