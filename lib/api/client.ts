@@ -169,7 +169,7 @@ export async function approveBounty(params: {
     recipients?: Array<{
       githubUsername: string;
       amount: number;
-      payoutType: "wallet" | "email";
+      payoutType: "email";
       recipientEmail: string | null;
       txHash: string | null;
       transactionId: string;
