@@ -1,6 +1,6 @@
 import "server-only";
 
-import { callLocusPayoutByEmail, getRecipientEmail, resolveAndPayout } from "@/lib/bounty/services/payout";
+import { callLocusPayoutByEmail, getRecipientEmail, resolveAndPayout, type PayoutResult } from "@/lib/bounty/services/payout";
 import { syncGithubBountyArtifacts } from "@/lib/bounty/services/github-sync";
 import { getSupabaseServiceClient } from "@/lib/clients/supabase/server";
 import { getGithubInstallationClient, getGithubRepoInstallationId } from "@/lib/clients/github/server";
@@ -131,7 +131,7 @@ export async function approveBountyPayout(params: {
     const results = [];
     for (const recipient of destinations) {
       const amount = recipient.cents / 100;
-      let result;
+      let result: PayoutResult;
       try {
         result = await callLocusPayoutByEmail({
           toEmail: recipient.email!,
