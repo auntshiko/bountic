@@ -10,13 +10,13 @@ Split amounts use integer-cent validation and must equal the funded bounty total
 
 ## Transfer safety
 
-Before the first external transfer, Bountic inserts one `PENDING` payout event per split recipient. A partial unique index applies only to rows whose metadata marks them as split payouts, preventing concurrent/replayed split approvals without changing legacy single-recipient ledger behavior.
+Before the first external transfer, Bountic inserts one `PENDING` payout event per split recipient and verifies that every reservation was returned by the database. A case-insensitive partial unique index on `(issue_id, lower(recipient_username))` applies only to rows whose metadata marks them as split payouts, preventing concurrent/replayed split approvals without changing legacy single-recipient ledger behavior.
 
-Each provider receipt is persisted before the next recipient is paid. The bounty is marked `PAID` only after every recipient transfer succeeds.
+Each provider receipt may update only its matching `PENDING` split reservation and is persisted before the next recipient is paid. The bounty transitions from `LOCKED` to `PAID` only after every recipient transfer succeeds and every receipt is accounted for. Activity logging and GitHub artifact synchronization happen after settlement; failures there are returned as warnings and do not falsely report a completed payout as failed.
 
 ## Interrupted payout reconciliation
 
-External provider calls and database writes cannot be made truly atomic. If a process stops after the provider accepted a transfer but before its receipt is persisted, Bountic deliberately refuses automatic replay because doing so could double-pay a contributor.
+External provider calls and database writes cannot be made truly atomic. If the provider accepts a transfer but its receipt cannot be persisted, the reservation is deliberately left unresolved rather than relabeled `FAILED`. Bountic then stops the batch and refuses automatic replay because doing so could double-pay a contributor.
 
 An operator should reconcile the reserved `payout_events` rows against Locus transaction history. `SUCCESS` rows must never be resent. `PENDING` or `FAILED` rows require confirmation of whether the provider moved funds before any manual recovery. This implementation intentionally favors preventing duplicate payments over automatic retry.
 
