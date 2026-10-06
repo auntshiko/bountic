@@ -166,17 +166,15 @@ export async function approveBountyPayout(params: {
     if (updateError) throw new Error("Failed to update bounty status to PAID: " + updateError.message);
 
     for (const recipient of results) {
-    const { error: activityError } = await supabase.from("activity_events").insert({
-      issue_id: issueId,
-      event_type: "PAYOUT_SENT",
-      actor_username: recipient.githubUsername,
-      amount: recipient.amount,
-      tx_hash: recipient.result.txHash,
-      metadata: { approved_by: params.approvedBy, payout_source: "web", split_payout: true },
-    });
-    if (activityError) throw new Error("Failed to persist payout activity: " + activityError.message);
-    }
-
+      const { error: activityError } = await supabase.from("activity_events").insert({
+        issue_id: issueId,
+        event_type: "PAYOUT_SENT",
+        actor_username: recipient.githubUsername,
+        amount: recipient.amount,
+        tx_hash: recipient.result.txHash,
+        metadata: { approved_by: params.approvedBy, payout_source: "web", split_payout: true },
+      });
+      if (activityError) throw new Error("Failed to persist payout activity: " + activityError.message);
     }
 
     await syncGithubBountyArtifacts(issueId);
