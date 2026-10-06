@@ -142,7 +142,7 @@ export async function approveBountyPayout(params: {
       .insert(reservationRows)
       .select("id");
     if (reservationError || reservedRows?.length !== reservationRows.length) {
-      throw new Error("Split payout could not reserve every recipient; refusing to start transfers");
+      throw new Error("Split payout plan was frozen but every recipient could not be reserved; no transfer was started and reconciliation is required");
     }
 
     const results: Array<{
