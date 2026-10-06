@@ -182,6 +182,7 @@ export async function approveBountyPayout(params: {
       .eq("issue_id", issueId);
     if (updateError) throw new Error("Failed to update bounty status to PAID: " + updateError.message);
 
+    const postPaymentWarnings: string[] = [];
     for (const recipient of results) {
       const { error: activityError } = await supabase.from("activity_events").insert({
         issue_id: issueId,
@@ -191,10 +192,19 @@ export async function approveBountyPayout(params: {
         tx_hash: recipient.result.txHash,
         metadata: { approved_by: params.approvedBy, payout_source: "web", split_payout: true },
       });
-      if (activityError) throw new Error("Failed to persist payout activity: " + activityError.message);
+      if (activityError) {
+        console.error("Split payout succeeded but activity logging failed:", activityError);
+        postPaymentWarnings.push("Failed to persist payout activity for @" + recipient.githubUsername);
+      }
     }
 
-    await syncGithubBountyArtifacts(issueId);
+    try {
+      await syncGithubBountyArtifacts(issueId);
+    } catch (error) {
+      console.error("Split payout succeeded but GitHub artifact sync failed:", error);
+      postPaymentWarnings.push("Failed to sync GitHub bounty artifacts");
+    }
+
     return {
       issueId,
       amount: bounty.total_amount,
@@ -207,6 +217,7 @@ export async function approveBountyPayout(params: {
         transactionId: recipient.result.transactionId,
       })),
       approvedBy: params.approvedBy,
+      warnings: postPaymentWarnings,
     };
   }
 
