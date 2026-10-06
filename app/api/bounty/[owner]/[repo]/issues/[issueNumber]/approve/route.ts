@@ -4,6 +4,10 @@ import { z } from "zod";
 import { getViewerRepoPermission } from "@/lib/auth/github-permissions";
 import { approveBountyPayout } from "@/lib/bounty/services/approve-payout";
 
+const approvalBodySchema = z.object({
+  splitPayouts: z.array(z.object({ githubUsername: z.string().min(1), amount: z.number().positive() })).min(2).optional(),
+});
+
 const routeParamsSchema = z.object({
   owner: z.string().min(1),
   repo: z.string().min(1),
@@ -28,11 +32,14 @@ export async function POST(
   }
 
   try {
+    const rawBody = await request.json().catch(() => ({}));
+    const body = approvalBodySchema.parse(rawBody);
     const result = await approveBountyPayout({
       owner: routeParams.owner,
       repo: routeParams.repo,
       issueNumber: routeParams.issueNumber,
       approvedBy: viewer.githubUsername,
+      splitPayouts: body.splitPayouts,
     });
 
     return NextResponse.json({ success: true, payout: result });
