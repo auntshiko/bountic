@@ -120,9 +120,12 @@ export async function approveBountyPayout(params: {
         split_payout: true,
       },
     }));
-    const { error: reservationError } = await supabase.from("payout_events").insert(reservationRows);
-    if (reservationError) {
-      throw new Error("Split payout is already reserved or completed; refusing a duplicate transfer");
+    const { data: reservedRows, error: reservationError } = await supabase
+      .from("payout_events")
+      .insert(reservationRows)
+      .select("id");
+    if (reservationError || reservedRows?.length !== reservationRows.length) {
+      throw new Error("Split payout could not reserve every recipient; refusing to start transfers");
     }
 
     const results = [];
