@@ -23,3 +23,21 @@ An operator should reconcile the reserved `payout_events` rows against Locus tra
 ## Deployment
 
 Apply `supabase/migrations/20261006_split_payout_recipient_guard.sql` before enabling split approvals. The index is scoped to split reservation rows and does not impose uniqueness on historical single-recipient payout events.
+
+
+## Immutable payout batch
+
+Before any external transfer, split approval freezes the maintainer-approved plan in
+`payout_batches`, keyed by the bounty issue. The frozen plan records each GitHub
+recipient, exact integer-cent allocation, and resolved payout email. A second approval
+for the same issue cannot create another batch, so a changed split cannot be replayed
+after a partial or ambiguous send.
+
+Recipient-level `payout_events` reservations remain in place as an additional guard.
+All recipient reservations are verified before the first Locus call. If the batch is
+created but recipient reservation fails, no transfer starts and the batch is retained
+for operator reconciliation rather than being deleted and retried.
+
+Deploy `20261006_split_payout_batch_guard.sql` before enabling split approvals, along
+with `20261006_split_payout_recipient_guard.sql`. The batch table has RLS enabled,
+is unavailable to anon/authenticated clients, and is writable by the service role.
