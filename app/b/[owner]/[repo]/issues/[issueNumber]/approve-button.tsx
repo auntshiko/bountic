@@ -38,6 +38,14 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
             })
           : undefined;
 
+        if (splitPayouts && splitPayouts.length < 2) {
+          throw new Error("A split payout requires at least two contributors");
+        }
+
+        if (splitPayouts && new Set(splitPayouts.map((entry) => entry.githubUsername.toLowerCase())).size !== splitPayouts.length) {
+          throw new Error("Split payout recipients must be unique");
+        }
+
         if (
           splitPayouts &&
           Math.round(splitPayouts.reduce((sum, entry) => sum + entry.amount, 0) * 100) !==
