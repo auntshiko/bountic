@@ -14,6 +14,17 @@ type Props = {
   totalAmount: number;
 };
 
+function parseSplitPayouts(splitText: string) {
+  if (!splitText.trim()) return undefined;
+
+  return splitText.trim().split(/\r?\n/).map((line) => {
+    const [githubUsername, rawAmount] = line.split(",").map((value) => value.trim());
+    const amount = Number(rawAmount);
+    if (!githubUsername || !Number.isFinite(amount) || amount <= 0) return null;
+    return { githubUsername, amount };
+  });
+}
+
 export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -21,22 +32,25 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [splitText, setSplitText] = useState("");
 
+  const previewSplits = parseSplitPayouts(splitText);
+  const validPreviewSplits = previewSplits?.filter(
+    (entry): entry is { githubUsername: string; amount: number } => entry !== null,
+  );
+  const previewTotal = validPreviewSplits?.reduce((sum, entry) => sum + entry.amount, 0) ?? 0;
+
   const onApprove = () => {
     setError(null);
     setSuccessMessage(null);
 
     startTransition(async () => {
       try {
-        const splitPayouts = splitText.trim()
-          ? splitText.trim().split(/\r?\n/).map((line) => {
-              const [githubUsername, rawAmount] = line.split(",").map((value) => value.trim());
-              const amount = Number(rawAmount);
-              if (!githubUsername || !Number.isFinite(amount) || amount <= 0) {
-                throw new Error("Use one GitHub username and dollar amount per line, for example: alice, 6.00");
-              }
-              return { githubUsername, amount };
-            })
-          : undefined;
+        const parsedSplits = parseSplitPayouts(splitText);
+        if (parsedSplits?.some((entry) => entry === null)) {
+          throw new Error("Use one GitHub username and dollar amount per line, for example: alice, 6.00");
+        }
+        const splitPayouts = parsedSplits?.filter(
+          (entry): entry is { githubUsername: string; amount: number } => entry !== null,
+        );
 
         if (splitPayouts && splitPayouts.length < 2) {
           throw new Error("A split payout requires at least two contributors");
@@ -103,6 +117,19 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
         One GitHub username and USDC amount per line. Total must equal ${totalAmount.toFixed(2)}.
         Leave blank for the winning PR author.
       </p>
+      {validPreviewSplits?.length ? (
+        <div className="mt-3 rounded border border-zinc-700 bg-zinc-950/60 p-3 text-sm text-zinc-300">
+          <p className="font-medium text-zinc-200">Payout preview</p>
+          {validPreviewSplits.map((entry) => (
+            <p key={entry.githubUsername.toLowerCase()} className="mt-1">
+              @{entry.githubUsername}: ${entry.amount.toFixed(2)} USDC
+            </p>
+          ))}
+          <p className="mt-2 text-xs text-zinc-400">
+            Total: ${previewTotal.toFixed(2)} / ${totalAmount.toFixed(2)} USDC
+          </p>
+        </div>
+      ) : null}
       <Button
         onClick={onApprove}
         disabled={isPending}
