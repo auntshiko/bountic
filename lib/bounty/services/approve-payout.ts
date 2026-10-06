@@ -149,7 +149,7 @@ export async function approveBountyPayout(params: {
             },
           })
           .eq("issue_id", issueId)
-          .eq("recipient_username", recipient.githubUsername);
+          .ilike("recipient_username", recipient.githubUsername);
         if (receiptError) throw new Error("Failed to persist payout receipt: " + receiptError.message);
         results.push({ ...recipient, amount, result });
       } catch (error) {
@@ -165,7 +165,7 @@ export async function approveBountyPayout(params: {
             },
           })
           .eq("issue_id", issueId)
-          .eq("recipient_username", recipient.githubUsername);
+          .ilike("recipient_username", recipient.githubUsername);
         throw error;
       }
     }
