@@ -15,7 +15,7 @@ export type PayoutResult = {
   recipientWallet?: string | null;
 };
 
-export function extractWalletFromPrBody(prBody: string | null): string | null {
+function extractWalletFromPrBody(prBody: string | null): string | null {
   if (!prBody) return null;
   const match = BOUNTIC_ADDRESS_REGEX.exec(prBody);
   return match ? match[1] : null;
