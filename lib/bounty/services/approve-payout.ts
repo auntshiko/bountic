@@ -128,7 +128,13 @@ export async function approveBountyPayout(params: {
       throw new Error("Split payout could not reserve every recipient; refusing to start transfers");
     }
 
-    const results = [];
+    const results: Array<{
+      githubUsername: string;
+      cents: number;
+      email: string | null;
+      amount: number;
+      result: PayoutResult;
+    }> = [];
     for (const recipient of destinations) {
       const amount = recipient.cents / 100;
       let result: PayoutResult;
