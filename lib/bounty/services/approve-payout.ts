@@ -1,6 +1,6 @@
 import "server-only";
 
-import { resolveAndPayout } from "@/lib/bounty/services/payout";
+import { callLocusPayoutByEmail, getRecipientEmail, resolveAndPayout } from "@/lib/bounty/services/payout";
 import { syncGithubBountyArtifacts } from "@/lib/bounty/services/github-sync";
 import { getSupabaseServiceClient } from "@/lib/clients/supabase/server";
 import { getGithubInstallationClient, getGithubRepoInstallationId } from "@/lib/clients/github/server";
@@ -11,6 +11,7 @@ export async function approveBountyPayout(params: {
   repo: string;
   issueNumber: number;
   approvedBy: string;
+  splitPayouts?: Array<{ githubUsername: string; amount: number }>;
 }) {
   const issueId = buildIssueId(params.owner, params.repo, params.issueNumber);
   const supabase = getSupabaseServiceClient();
@@ -57,7 +58,106 @@ export async function approveBountyPayout(params: {
     }
   }
 
-  // only single payout for now, later multiple payouts
+  const requestedSplits = params.splitPayouts ?? [];
+
+  if (requestedSplits.length > 0) {
+    const normalized = requestedSplits.map((split) => ({
+      githubUsername: split.githubUsername.trim(),
+      cents: Math.round(split.amount * 100),
+    }));
+    const totalCents = Math.round(bounty.total_amount * 100);
+    const usernames = normalized.map((split) => split.githubUsername.toLowerCase());
+
+    if (normalized.some((split) => !split.githubUsername || split.cents <= 0)) {
+      throw new Error("Every split payout must have a GitHub username and a positive amount");
+    }
+    if (new Set(usernames).size !== usernames.length) {
+      throw new Error("Split payout recipients must be unique");
+    }
+    if (normalized.reduce((sum, split) => sum + split.cents, 0) !== totalCents) {
+      throw new Error("Split payout amounts must equal the bounty total exactly");
+    }
+
+    const destinations = await Promise.all(
+      normalized.map(async (split) => ({
+        ...split,
+        email: await getRecipientEmail(split.githubUsername),
+      })),
+    );
+    const unresolved = destinations.find((recipient) => !recipient.email);
+    if (unresolved) {
+      throw new Error("@" + unresolved.githubUsername + " must connect a payout destination before approval");
+    }
+
+    const results = [];
+    for (const recipient of destinations) {
+      const amount = recipient.cents / 100;
+      const result = await callLocusPayoutByEmail({
+        toEmail: recipient.email!,
+        amount,
+        memo: "Bountic split payout for " + issueId,
+      });
+      results.push({ ...recipient, amount, result });
+    }
+
+    const now = new Date().toISOString();
+    const { error: updateError } = await supabase
+      .from("bounties")
+      .update({
+        status: "PAID",
+        payout_tx_hash: results.map(({ result }) => result.txHash).filter(Boolean).join(",") || null,
+        paid_at: now,
+        approved_by: params.approvedBy,
+      })
+      .eq("issue_id", issueId);
+    if (updateError) throw new Error("Failed to update bounty status to PAID: " + updateError.message);
+
+    for (const recipient of results) {
+      const { error: payoutEventError } = await supabase.from("payout_events").insert({
+        issue_id: issueId,
+        recipient_username: recipient.githubUsername,
+        amount: recipient.amount,
+        locus_transaction_id: recipient.result.transactionId,
+        transaction_hash: recipient.result.txHash,
+        status: "SUCCESS",
+        metadata: {
+          approved_by: params.approvedBy,
+          payout_source: "web",
+          payout_type: recipient.result.payoutType,
+          recipient_email: recipient.result.recipientEmail,
+          split_payout: true,
+        },
+      });
+      if (payoutEventError) throw new Error("Failed to persist payout event: " + payoutEventError.message);
+
+      const { error: activityError } = await supabase.from("activity_events").insert({
+        issue_id: issueId,
+        event_type: "PAYOUT_SENT",
+        actor_username: recipient.githubUsername,
+        amount: recipient.amount,
+        tx_hash: recipient.result.txHash,
+        metadata: { approved_by: params.approvedBy, payout_source: "web", split_payout: true },
+      });
+      if (activityError) throw new Error("Failed to persist payout activity: " + activityError.message);
+    }
+
+    await syncGithubBountyArtifacts(issueId);
+    return {
+      issueId,
+      amount: bounty.total_amount,
+      recipients: results.map((recipient) => ({
+        githubUsername: recipient.githubUsername,
+        amount: recipient.amount,
+        payoutType: recipient.result.payoutType,
+        recipientEmail: recipient.result.recipientEmail,
+        txHash: recipient.result.txHash,
+        transactionId: recipient.result.transactionId,
+      })),
+      approvedBy: params.approvedBy,
+    };
+  }
+
+  // Backward-compatible single-winner payout.
   const payoutResult = await resolveAndPayout({
     owner: params.owner,
     repo: params.repo,
@@ -70,11 +170,8 @@ export async function approveBountyPayout(params: {
 
   // An unclaimed payout does not transfer funds. Keep the bounty LOCKED so a
   // maintainer can retry after the winner connects a payout destination.
-  // Marking it PAID here would permanently record a successful settlement
-  // even though no USDC left escrow.
   if (payoutResult.payoutType === "unclaimed") {
     await syncGithubBountyArtifacts(issueId);
-
     return {
       issueId,
       amount: bounty.total_amount,
