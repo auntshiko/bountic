@@ -90,7 +90,7 @@ export async function approveBountyPayout(params: {
     }
 
     // Reserve every recipient before any external transfer. The unique
-    // (issue_id, recipient_username) index makes concurrent approvals fail
+    // split-only (issue_id, recipient_username) index makes concurrent approvals fail
     // before money moves and leaves a durable checkpoint for ambiguous retries.
     const reservationRows = destinations.map((recipient) => ({
       issue_id: issueId,
