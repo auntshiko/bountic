@@ -163,6 +163,12 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
           </p>
         </div>
       ) : null}
+      {hasSplitInput && splitValidationError ? (
+        <p className="mt-2 text-xs text-red-300">{splitValidationError}</p>
+      ) : null}
+      {hasSplitInput && !splitValidationError ? (
+        <p className="mt-2 text-xs text-emerald-300">Split is ready to approve.</p>
+      ) : null}
       <Button
         onClick={onApprove}
         disabled={isPending || Boolean(splitValidationError)}
