@@ -34,7 +34,8 @@ function fixture(options = {}) {
           if (table === "payout_events" && state.operation === "update") {
             const username = state.filters.find(x => x[1] === "recipient_username")?.[2];
             const row = payoutEvents.find(x => x.recipient_username.toLowerCase() === String(username).toLowerCase() && x.status === "PENDING");
-            if (!row || options.receiptFailure === username) return { data: null, error: options.receiptFailure === username ? { message: "receipt offline" } : null };
+            const receiptFailure = options.receiptFailure?.toLowerCase() === String(username).toLowerCase();
+            if (!row || receiptFailure) return { data: null, error: receiptFailure ? { message: "receipt offline" } : null };
             Object.assign(row, state.payload);
             return { data: { id: row.id }, error: null };
           }
@@ -49,7 +50,8 @@ function fixture(options = {}) {
           }
           if (table === "payout_events") {
             const rows = Array.isArray(payload) ? payload : [payload];
-            rows.forEach((row, i) => payoutEvents.push({ id: "p" + (payoutEvents.length + i + 1), ...row }));
+            const startId = payoutEvents.length + 1;
+            rows.forEach((row, i) => payoutEvents.push({ id: "p" + (startId + i), ...row }));
             state.operation = "insert";
             state.payload = payload;
             return query;
