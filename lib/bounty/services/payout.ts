@@ -15,13 +15,13 @@ export type PayoutResult = {
   recipientWallet?: string | null;
 };
 
-function extractWalletFromPrBody(prBody: string | null): string | null {
+export function extractWalletFromPrBody(prBody: string | null): string | null {
   if (!prBody) return null;
   const match = BOUNTIC_ADDRESS_REGEX.exec(prBody);
   return match ? match[1] : null;
 }
 
-async function getRecipientEmail(githubUsername: string): Promise<string | null> {
+export async function getRecipientEmail(githubUsername: string): Promise<string | null> {
   const supabase = getSupabaseServiceClient();
   const { data: user } = await supabase
     .from("users")
