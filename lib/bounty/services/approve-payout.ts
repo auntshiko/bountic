@@ -285,7 +285,7 @@ export async function approveBountyPayout(params: {
 
   const now = new Date().toISOString();
 
-  const { error: updateError } = await supabase
+  const { data: paidBounty, error: updateError } = await supabase
     .from("bounties")
     .update({
       status: "PAID",
@@ -293,12 +293,19 @@ export async function approveBountyPayout(params: {
       paid_at: now,
       approved_by: params.approvedBy,
     })
-    .eq("issue_id", issueId);
+    .eq("issue_id", issueId)
+    .eq("status", "LOCKED")
+    .select("issue_id")
+    .maybeSingle();
 
   if (updateError) {
     throw new Error(`Failed to update bounty status to PAID: ${updateError.message}`);
   }
+  if (!paidBounty) {
+    throw new Error("Bounty state changed during payout; funds may have moved and manual reconciliation is required");
+  }
 
+  const postPaymentWarnings: string[] = [];
   const { error: payoutEventError } = await supabase.from("payout_events").insert({
     issue_id: issueId,
     recipient_username: bounty.winning_pr_author,
@@ -316,7 +323,8 @@ export async function approveBountyPayout(params: {
   });
 
   if (payoutEventError) {
-    throw new Error(`Failed to persist payout event: ${payoutEventError.message}`);
+    console.error("Payout succeeded but payout event persistence failed:", payoutEventError);
+    postPaymentWarnings.push("Failed to persist payout event");
   }
 
   const { error: activityError } = await supabase.from("activity_events").insert({
@@ -333,10 +341,16 @@ export async function approveBountyPayout(params: {
   });
 
   if (activityError) {
-    throw new Error(`Failed to persist payout activity: ${activityError.message}`);
+    console.error("Payout succeeded but activity logging failed:", activityError);
+    postPaymentWarnings.push("Failed to persist payout activity");
   }
 
-  await syncGithubBountyArtifacts(issueId);
+  try {
+    await syncGithubBountyArtifacts(issueId);
+  } catch (error) {
+    console.error("Payout succeeded but GitHub artifact sync failed:", error);
+    postPaymentWarnings.push("Failed to sync GitHub bounty artifacts");
+  }
 
   return {
     issueId,
@@ -348,5 +362,6 @@ export async function approveBountyPayout(params: {
     txHash: payoutResult.txHash,
     transactionId: payoutResult.transactionId,
     approvedBy: params.approvedBy,
+    warnings: postPaymentWarnings,
   };
 }
