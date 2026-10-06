@@ -148,7 +148,9 @@ export async function approveBountyPayout(params: {
             },
           })
           .eq("issue_id", issueId)
-          .ilike("recipient_username", recipient.githubUsername);
+          .ilike("recipient_username", recipient.githubUsername)
+          .eq("status", "PENDING")
+          .contains("metadata", { split_payout: true });
         throw error;
       }
 
@@ -167,7 +169,9 @@ export async function approveBountyPayout(params: {
           },
         })
         .eq("issue_id", issueId)
-        .ilike("recipient_username", recipient.githubUsername);
+        .ilike("recipient_username", recipient.githubUsername)
+        .eq("status", "PENDING")
+        .contains("metadata", { split_payout: true });
 
       if (receiptError) {
         // The provider already accepted this transfer. Do not relabel the
