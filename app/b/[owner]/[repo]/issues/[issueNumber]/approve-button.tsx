@@ -27,7 +27,8 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
 
     startTransition(async () => {
       try {
-        const splitPayouts = splitText.trim() ? splitText.trim().split(/\\r?\\n/).map((line) => {
+        const splitPayouts = splitText.trim() ? splitText.trim().split(/\\r?\
+/).map((line) => {
           const [githubUsername, rawAmount] = line.split(",").map((value) => value.trim());
           const amount = Number(rawAmount);
           if (!githubUsername || !Number.isFinite(amount) || amount <= 0) {
@@ -62,7 +63,21 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
     <div className="rounded-2xl border border-emerald-300/30 bg-emerald-400/5 p-4">
       <p className="text-xs uppercase tracking-[0.2em] text-emerald-300/80">Maintainer Action</p>
       <p className="mt-2 text-sm text-zinc-300">PR is merged and bounty is locked. Approve payout to release funds.</p>
-      <label className="mt-4 block text-sm text-zinc-300">\n        Split payout (optional)\n        <textarea\n          className="mt-2 block w-full rounded border border-zinc-600 bg-zinc-950 p-2 text-white"\n          value={splitText}\n          onChange={(event) => setSplitText(event.target.value)}\n          disabled={isPending}\n          rows={3}\n          placeholder={"alice, 6.00\\nbob, 4.00"}\n        />\n      </label>\n      <p className="mt-2 text-xs text-zinc-400">One GitHub username and USDC amount per line. Total must equal ${totalAmount.toFixed(2)}. Leave blank for the winning PR author.</p>\n      <Button\n        onClick={onApprove}
+      <label className="mt-4 block text-sm text-zinc-300">
+        Split payout (optional)
+        <textarea
+          className="mt-2 block w-full rounded border border-zinc-600 bg-zinc-950 p-2 text-white"
+          value={splitText}
+          onChange={(event) => setSplitText(event.target.value)}
+          disabled={isPending}
+          rows={3}
+          placeholder={"alice, 6.00\
+bob, 4.00"}
+        />
+      </label>
+      <p className="mt-2 text-xs text-zinc-400">One GitHub username and USDC amount per line. Total must equal ${totalAmount.toFixed(2)}. Leave blank for the winning PR author.</p>
+      <Button
+        onClick={onApprove}
         disabled={isPending}
         className="mt-4 h-10 w-full bg-emerald-400 text-black hover:bg-emerald-300"
       >
