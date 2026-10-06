@@ -14,7 +14,13 @@ function fixture(options = {}) {
     from(table) {
       const state = { table, operation: null, payload: null, filters: [] };
       const query = {
-        select() { return query; },
+        select() {
+          if (state.operation === "insert") {
+            const rows = Array.isArray(state.payload) ? state.payload : [state.payload];
+            return Promise.resolve({ data: rows.map((_, i) => ({ id: "p" + (i + 1) })), error: null });
+          }
+          return query;
+        },
         eq(column, value) { state.filters.push(["eq", column, value]); return query; },
         ilike(column, value) { state.filters.push(["ilike", column, value]); return query; },
         contains(column, value) { state.filters.push(["contains", column, value]); return query; },
@@ -44,7 +50,9 @@ function fixture(options = {}) {
           if (table === "payout_events") {
             const rows = Array.isArray(payload) ? payload : [payload];
             rows.forEach((row, i) => payoutEvents.push({ id: "p" + (payoutEvents.length + i + 1), ...row }));
-            return { select: async () => ({ data: rows.map((_, i) => ({ id: "p" + (i + 1) })), error: null }) };
+            state.operation = "insert";
+            state.payload = payload;
+            return query;
           }
           return Promise.resolve({ error: null });
         },
