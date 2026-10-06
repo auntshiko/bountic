@@ -26,7 +26,7 @@ export async function getRecipientEmail(githubUsername: string): Promise<string 
   const { data: user } = await supabase
     .from("users")
     .select("email")
-    .eq("github_username", githubUsername)
+    .ilike("github_username", githubUsername.trim())
     .maybeSingle();
   return user?.email ?? null;
 }
