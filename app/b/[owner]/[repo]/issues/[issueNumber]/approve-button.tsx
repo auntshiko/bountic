@@ -18,7 +18,10 @@ function parseSplitPayouts(splitText: string) {
   if (!splitText.trim()) return undefined;
 
   return splitText.trim().split(/\r?\n/).map((line) => {
-    const [githubUsername, rawAmount] = line.split(",").map((value) => value.trim());
+    const parts = line.split(",").map((value) => value.trim());
+    if (parts.length !== 2) return null;
+
+    const [githubUsername, rawAmount] = parts;
     const amount = Number(rawAmount);
     if (!githubUsername || !Number.isFinite(amount) || amount <= 0) return null;
     return { githubUsername, amount };
@@ -120,8 +123,8 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
       {validPreviewSplits?.length ? (
         <div className="mt-3 rounded border border-zinc-700 bg-zinc-950/60 p-3 text-sm text-zinc-300">
           <p className="font-medium text-zinc-200">Payout preview</p>
-          {validPreviewSplits.map((entry) => (
-            <p key={entry.githubUsername.toLowerCase()} className="mt-1">
+          {validPreviewSplits.map((entry, index) => (
+            <p key={`${entry.githubUsername.toLowerCase()}-${index}`} className="mt-1">
               @{entry.githubUsername}: ${entry.amount.toFixed(2)} USDC
             </p>
           ))}
