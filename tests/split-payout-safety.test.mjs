@@ -10,7 +10,7 @@ const batchMigration = readFileSync(new URL("../supabase/migrations/20261006_spl
 test("client and service enforce whole-cent split amounts", () => {
   assert.match(source, /Math\.abs\(rawCents - Math\.round\(rawCents\)\) >= 1e-8/);
   assert.match(service, /Math\.abs\(rawCents - Math\.round\(rawCents\)\) >= 1e-8/);
-  assert.match(service, /normalized\\.reduce\\(\\(sum, split\\) => sum \\+ split\\.cents, 0\\) !== totalCents/);
+  assert.ok(service.includes("normalized.reduce((sum, split) => sum + split.cents, 0) !== totalCents"));
 });
 
 test("client blocks malformed, duplicate, undersized, oversized and wrong-total splits", () => {
