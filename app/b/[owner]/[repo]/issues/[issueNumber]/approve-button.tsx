@@ -40,10 +40,12 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
           throw new Error("Split amounts must equal the bounty total exactly");
         }
         const response = await approveBounty({ owner, repo, issueNumber, splitPayouts });
-        const { payoutType, recipientEmail, recipientWallet } = response.payout;
+        const { payoutType, recipientEmail, recipientWallet, recipients } = response.payout;
         
         let message = "";
-        if (payoutType === "wallet" && recipientWallet) {
+        if (recipients?.length) {
+          message = recipients.map((entry) => `@${entry.githubUsername}: ${entry.amount.toFixed(2)} USDC`).join("; ");
+        } else if (payoutType === "wallet" && recipientWallet) {
           message = `Payout sent to wallet ${recipientWallet.slice(0, 6)}...${recipientWallet.slice(-4)}`;
         } else if (payoutType === "email" && recipientEmail) {
           message = `Payout sent to ${recipientEmail}`;
