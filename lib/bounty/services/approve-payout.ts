@@ -179,7 +179,10 @@ export async function approveBountyPayout(params: {
         paid_at: now,
         approved_by: params.approvedBy,
       })
-      .eq("issue_id", issueId);
+      .eq("issue_id", issueId)
+      .eq("status", "LOCKED")
+      .select("issue_id")
+      .maybeSingle();
     if (updateError) throw new Error("Failed to update bounty status to PAID: " + updateError.message);
 
     const postPaymentWarnings: string[] = [];
