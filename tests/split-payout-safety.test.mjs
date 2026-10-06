@@ -5,6 +5,7 @@ import { test } from "node:test";
 const source = readFileSync(new URL("../app/b/[owner]/[repo]/issues/[issueNumber]/approve-button.tsx", import.meta.url), "utf8");
 const service = readFileSync(new URL("../lib/bounty/services/approve-payout.ts", import.meta.url), "utf8");
 const migration = readFileSync(new URL("../supabase/migrations/20261006_split_payout_recipient_guard.sql", import.meta.url), "utf8");
+const batchMigration = readFileSync(new URL("../supabase/migrations/20261006_split_payout_batch_guard.sql", import.meta.url), "utf8");
 
 test("client and service enforce whole-cent split amounts", () => {
   assert.match(source, /Math\.abs\(rawCents - Math\.round\(rawCents\)\) >= 1e-8/);
@@ -21,11 +22,12 @@ test("client blocks malformed, duplicate, undersized, oversized and wrong-total 
   assert.match(source, /disabled=\{isPending \|\| Boolean\(splitValidationError\)\}/);
 });
 
-test("all split reservations are created before the first provider transfer", () => {
+test("approved plan is frozen and all recipients are reserved before the first provider transfer", () => {
+  const batch = service.indexOf('.from("payout_batches").insert');
   const reservation = service.indexOf(".insert(reservationRows)");
   const verification = service.indexOf("reservedRows?.length !== reservationRows.length");
-  const transfer = service.indexOf("callLocusPayoutByEmail");
-  assert.ok(reservation >= 0 && verification > reservation && transfer > verification);
+  const transfer = service.indexOf("callLocusPayoutByEmail({");
+  assert.ok(batch >= 0 && reservation > batch && verification > reservation && transfer > verification);
 });
 
 test("split receipt updates only a pending split reservation", () => {
@@ -52,4 +54,17 @@ test("post-settlement sync failures are warnings, not false payment failures", (
   assert.match(service, /postPaymentWarnings: string\[\]/);
   assert.match(service, /Failed to sync GitHub bounty artifacts/);
   assert.match(service, /warnings: postPaymentWarnings/);
+});
+
+
+test("payout batch migration is private and issue-unique", () => {
+  assert.match(batchMigration, /issue_id text primary key/);
+  assert.match(batchMigration, /enable row level security/);
+  assert.match(batchMigration, /revoke all on public\.payout_batches from anon, authenticated/);
+  assert.match(batchMigration, /grant select, insert on public\.payout_batches to service_role/);
+});
+
+test("a frozen batch failure is reconciliation-required rather than replayable", () => {
+  assert.match(service, /Split payout is already reserved or could not freeze its approved plan; reconciliation is required/);
+  assert.match(service, /plan was frozen but every recipient could not be reserved; no transfer was started and reconciliation is required/);
 });
