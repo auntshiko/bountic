@@ -68,6 +68,26 @@ export async function approveBountyPayout(params: {
     issueId,
   });
 
+  // An unclaimed payout does not transfer funds. Keep the bounty LOCKED so a
+  // maintainer can retry after the winner connects a payout destination.
+  // Marking it PAID here would permanently record a successful settlement
+  // even though no USDC left escrow.
+  if (payoutResult.payoutType === "unclaimed") {
+    await syncGithubBountyArtifacts(issueId);
+
+    return {
+      issueId,
+      amount: bounty.total_amount,
+      recipient: bounty.winning_pr_author,
+      payoutType: payoutResult.payoutType,
+      recipientEmail: payoutResult.recipientEmail,
+      recipientWallet: payoutResult.recipientWallet,
+      txHash: payoutResult.txHash,
+      transactionId: payoutResult.transactionId,
+      approvedBy: params.approvedBy,
+    };
+  }
+
   const now = new Date().toISOString();
 
   const { error: updateError } = await supabase
