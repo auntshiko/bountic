@@ -175,6 +175,7 @@ export async function approveBounty(params: {
       transactionId: string;
     }>;
     approvedBy: string;
+    warnings?: string[];
   };
 }> {
   const res = await fetch(
