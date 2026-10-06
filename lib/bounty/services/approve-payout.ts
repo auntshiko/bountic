@@ -171,7 +171,7 @@ export async function approveBountyPayout(params: {
     }
 
     const now = new Date().toISOString();
-    const { error: updateError } = await supabase
+    const { data: paidBounty, error: updateError } = await supabase
       .from("bounties")
       .update({
         status: "PAID",
@@ -184,6 +184,9 @@ export async function approveBountyPayout(params: {
       .select("issue_id")
       .maybeSingle();
     if (updateError) throw new Error("Failed to update bounty status to PAID: " + updateError.message);
+    if (!paidBounty) {
+      throw new Error("Bounty state changed during split payout; funds may have moved and manual reconciliation is required");
+    }
 
     const postPaymentWarnings: string[] = [];
     for (const recipient of results) {
