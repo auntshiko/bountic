@@ -106,9 +106,26 @@ export async function approveBountyPayout(params: {
       throw new Error("@" + unresolved.githubUsername + " must connect a payout destination before approval");
     }
 
+    // Freeze the maintainer-approved plan before any transfer. The issue-level
+    // primary key arbitrates concurrent approvals and prevents a changed plan from
+    // being replayed after a partial or ambiguous send.
+    const frozenPlan = destinations.map((recipient) => ({
+      githubUsername: recipient.githubUsername,
+      cents: recipient.cents,
+      email: recipient.email,
+    }));
+    const { error: batchError } = await supabase.from("payout_batches").insert({
+      issue_id: issueId,
+      approved_by: params.approvedBy,
+      plan: frozenPlan,
+    });
+    if (batchError) {
+      throw new Error("Split payout is already reserved or could not freeze its approved plan; reconciliation is required");
+    }
+
     // Reserve every recipient before any external transfer. The unique
-    // split-only (issue_id, recipient_username) index makes concurrent approvals fail
-    // before money moves and leaves a durable checkpoint for ambiguous retries.
+    // split-only (issue_id, recipient_username) index adds recipient-level
+    // protection beneath the immutable issue-level batch.
     const reservationRows = destinations.map((recipient) => ({
       issue_id: issueId,
       recipient_username: recipient.githubUsername,
