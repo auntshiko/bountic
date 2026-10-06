@@ -23,7 +23,16 @@ function parseSplitPayouts(splitText: string) {
 
     const [githubUsername, rawAmount] = parts;
     const amount = Number(rawAmount);
-    if (!githubUsername || !Number.isFinite(amount) || amount <= 0) return null;
+    const rawCents = amount * 100;
+    if (
+      !/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(githubUsername) ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      !Number.isSafeInteger(Math.round(rawCents)) ||
+      Math.abs(rawCents - Math.round(rawCents)) >= 1e-8
+    ) {
+      return null;
+    }
     return { githubUsername, amount };
   });
 }
@@ -49,7 +58,7 @@ export function ApproveButton({ owner, repo, issueNumber, totalAmount }: Props) 
       try {
         const parsedSplits = parseSplitPayouts(splitText);
         if (parsedSplits?.some((entry) => entry === null)) {
-          throw new Error("Use one GitHub username and dollar amount per line, for example: alice, 6.00");
+          throw new Error("Use a valid GitHub username and whole-cent USDC amount per line, for example: alice, 6.00");
         }
         const splitPayouts = parsedSplits?.filter(
           (entry): entry is { githubUsername: string; amount: number } => entry !== null,
