@@ -61,11 +61,28 @@ export async function approveBountyPayout(params: {
   const requestedSplits = params.splitPayouts ?? [];
 
   if (requestedSplits.length > 0) {
-    const normalized = requestedSplits.map((split) => ({
-      githubUsername: split.githubUsername.trim(),
-      cents: Math.round(split.amount * 100),
-    }));
-    const totalCents = Math.round(bounty.total_amount * 100);
+    if (requestedSplits.length < 2 || requestedSplits.length > 50) {
+      throw new Error("Split payouts require between 2 and 50 recipients");
+    }
+
+    const normalized = requestedSplits.map((split) => {
+      const githubUsername = split.githubUsername.trim();
+      const rawCents = split.amount * 100;
+      if (
+        !/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(githubUsername) ||
+        !Number.isFinite(split.amount) ||
+        !Number.isSafeInteger(Math.round(rawCents)) ||
+        Math.abs(rawCents - Math.round(rawCents)) >= 1e-8
+      ) {
+        throw new Error("Each split requires a valid GitHub username and a whole-cent amount");
+      }
+      return { githubUsername, cents: Math.round(rawCents) };
+    });
+    const rawTotalCents = bounty.total_amount * 100;
+    if (!Number.isSafeInteger(Math.round(rawTotalCents)) || Math.abs(rawTotalCents - Math.round(rawTotalCents)) >= 1e-8) {
+      throw new Error("Bounty total must be a safe whole-cent amount");
+    }
+    const totalCents = Math.round(rawTotalCents);
     const usernames = normalized.map((split) => split.githubUsername.toLowerCase());
 
     if (normalized.some((split) => !split.githubUsername || split.cents <= 0)) {
