@@ -128,30 +128,13 @@ export async function approveBountyPayout(params: {
     const results = [];
     for (const recipient of destinations) {
       const amount = recipient.cents / 100;
+      let result;
       try {
-        const result = await callLocusPayoutByEmail({
+        result = await callLocusPayoutByEmail({
           toEmail: recipient.email!,
           amount,
           memo: "Bountic split payout for " + issueId,
         });
-        const { error: receiptError } = await supabase
-          .from("payout_events")
-          .update({
-            locus_transaction_id: result.transactionId,
-            transaction_hash: result.txHash,
-            status: "SUCCESS",
-            metadata: {
-              approved_by: params.approvedBy,
-              payout_source: "web",
-              payout_type: result.payoutType,
-              recipient_email: result.recipientEmail,
-              split_payout: true,
-            },
-          })
-          .eq("issue_id", issueId)
-          .ilike("recipient_username", recipient.githubUsername);
-        if (receiptError) throw new Error("Failed to persist payout receipt: " + receiptError.message);
-        results.push({ ...recipient, amount, result });
       } catch (error) {
         await supabase
           .from("payout_events")
@@ -168,6 +151,42 @@ export async function approveBountyPayout(params: {
           .ilike("recipient_username", recipient.githubUsername);
         throw error;
       }
+
+      const { error: receiptError } = await supabase
+        .from("payout_events")
+        .update({
+          locus_transaction_id: result.transactionId,
+          transaction_hash: result.txHash,
+          status: "SUCCESS",
+          metadata: {
+            approved_by: params.approvedBy,
+            payout_source: "web",
+            payout_type: result.payoutType,
+            recipient_email: result.recipientEmail,
+            split_payout: true,
+          },
+        })
+        .eq("issue_id", issueId)
+        .ilike("recipient_username", recipient.githubUsername);
+
+      if (receiptError) {
+        // The provider already accepted this transfer. Do not relabel the
+        // reservation FAILED or automatically retry it: either action could
+        // hide or duplicate money that moved. Preserve the reservation and
+        // surface the provider identifiers for operator reconciliation.
+        console.error("Split payout transfer succeeded but receipt persistence failed:", {
+          issueId,
+          githubUsername: recipient.githubUsername,
+          transactionId: result.transactionId,
+          txHash: result.txHash,
+          receiptError,
+        });
+        throw new Error(
+          "Payout transfer may have succeeded but its receipt could not be persisted; manual reconciliation is required",
+        );
+      }
+
+      results.push({ ...recipient, amount, result });
     }
 
     const now = new Date().toISOString();
