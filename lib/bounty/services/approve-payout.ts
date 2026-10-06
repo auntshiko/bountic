@@ -154,7 +154,7 @@ export async function approveBountyPayout(params: {
         throw error;
       }
 
-      const { error: receiptError } = await supabase
+      const { data: persistedReceipt, error: receiptError } = await supabase
         .from("payout_events")
         .update({
           locus_transaction_id: result.transactionId,
@@ -171,9 +171,11 @@ export async function approveBountyPayout(params: {
         .eq("issue_id", issueId)
         .ilike("recipient_username", recipient.githubUsername)
         .eq("status", "PENDING")
-        .contains("metadata", { split_payout: true });
+        .contains("metadata", { split_payout: true })
+        .select("id")
+        .maybeSingle();
 
-      if (receiptError) {
+      if (receiptError || !persistedReceipt) {
         // The provider already accepted this transfer. Do not relabel the
         // reservation FAILED or automatically retry it: either action could
         // hide or duplicate money that moved. Preserve the reservation and
@@ -183,7 +185,7 @@ export async function approveBountyPayout(params: {
           githubUsername: recipient.githubUsername,
           transactionId: result.transactionId,
           txHash: result.txHash,
-          receiptError,
+          receiptError: receiptError ?? "reserved payout row was not found",
         });
         throw new Error(
           "Payout transfer may have succeeded but its receipt could not be persisted; manual reconciliation is required",
