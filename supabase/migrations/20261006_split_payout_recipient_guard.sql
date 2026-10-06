@@ -1,4 +1,5 @@
--- Prevent duplicate payout attempts for the same recipient on a bounty.
--- Deploy this before code that reserves split payouts in payout_events.
-create unique index if not exists payout_events_issue_recipient_unique_idx
-  on public.payout_events(issue_id, recipient_username);
+-- Reserve each split recipient once without constraining legacy payout history.
+-- Only rows created by the split-payout flow carry metadata.split_payout=true.
+create unique index if not exists payout_events_split_reservation_unique_idx
+  on public.payout_events(issue_id, recipient_username)
+  where (metadata ->> 'split_payout') = 'true';
